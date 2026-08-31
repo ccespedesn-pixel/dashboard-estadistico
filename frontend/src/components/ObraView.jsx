@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '../api.js';
+import { api, apiUrl } from '../api.js';
 import { Card, Badge, estadoColor, Button } from './ui.jsx';
 import InformeTiempos from './InformeTiempos.jsx';
 import FaltanteInstalacion from './FaltanteInstalacion.jsx';
@@ -348,7 +348,7 @@ function ModalFaltantes({ data, onClose }) {
   const descargarPdf = () => {
     const areaParam = areaSel !== 'TODAS' ? '?area=' + encodeURIComponent(areaSel) : '';
     const a = document.createElement('a');
-    a.href = '/api/reportes/faltantes-obra.pdf' + areaParam;
+    a.href = apiUrl('/reportes/faltantes-obra.pdf' + areaParam);
     a.download = 'faltantes_obra.pdf';
     document.body.appendChild(a);
     a.click();
