@@ -345,14 +345,26 @@ function ModalFaltantes({ data, onClose }) {
     return <span className="text-slate-400">—</span>;
   };
 
-  const descargarPdf = () => {
-    const areaParam = areaSel !== 'TODAS' ? '?area=' + encodeURIComponent(areaSel) : '';
-    const a = document.createElement('a');
-    a.href = apiUrl('/reportes/faltantes-obra.pdf' + areaParam);
-    a.download = 'faltantes_obra.pdf';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+  const [descargandoPdf, setDescargandoPdf] = useState(false);
+  const descargarPdf = async () => {
+    setDescargandoPdf(true);
+    try {
+      const areaParam = areaSel !== 'TODAS' ? '?area=' + encodeURIComponent(areaSel) : '';
+      const res = await fetch(apiUrl('/reportes/faltantes-obra.pdf' + areaParam));
+      if (!res.ok) throw new Error('Error al descargar PDF');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'faltantes_obra.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('No se pudo descargar el PDF: ' + err.message);
+    }
+    setDescargandoPdf(false);
   };
 
   return (
@@ -378,9 +390,9 @@ function ModalFaltantes({ data, onClose }) {
                 </button>
               ))}
             </div>
-            <button onClick={descargarPdf}
-              className="ml-auto rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 px-5 py-2 text-sm font-semibold">
-              📥 Descargar PDF
+            <button onClick={descargarPdf} disabled={descargandoPdf}
+              className="ml-auto rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 px-5 py-2 text-sm font-semibold disabled:opacity-50">
+              {descargandoPdf ? 'Descargando...' : '📥 Descargar PDF'}
             </button>
           </div>
           <div className="grid grid-cols-3 gap-4">
@@ -461,7 +473,9 @@ function ModalFaltantes({ data, onClose }) {
         {/* Footer */}
         <div className="border-t border-slate-200 px-6 py-3 flex justify-end gap-3 bg-slate-50 rounded-b-2xl">
           <button onClick={onClose} className="rounded-lg border border-slate-300 px-5 py-2 text-sm hover:bg-slate-100">Cerrar</button>
-          <button onClick={descargarPdf} className="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-500">📥 Descargar PDF</button>
+          <button onClick={descargarPdf} disabled={descargandoPdf} className="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50">
+            {descargandoPdf ? 'Descargando...' : '📥 Descargar PDF'}
+          </button>
         </div>
       </div>
     </div>
