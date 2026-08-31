@@ -251,4 +251,219 @@ router.get('/material.pdf', (req, res) => {
   doc.end();
 });
 
+// ---------- REPORTE PDF DE FALTANTES DE OBRA ----------
+router.get('/faltantes-obra.pdf', (req, res) => {
+  const area = req.query.area;
+  const where = area && area !== 'TODAS' ? 'WHERE area = ?' : '';
+  const rows = db.prepare(
+    `SELECT * FROM obra_items ${where} ORDER BY area, grupo, codigo`
+  ).all(...(where ? [area] : []));
+
+  function analizarDias(dias) {
+    const s = String(dias || '').trim();
+    if (!s) return null;
+    const nums = (s.match(/\d+/g) || []).map(Number);
+    if (!nums.length) return null;
+    return { inicio: Math.min(...nums), fin: Math.max(...nums), span: Math.max(1, Math.max(...nums) - Math.min(...nums) + 1) };
+  }
+  function estadoConf(o) {
+    if (o.config_estado) return o.config_estado;
+    if (!o.dias_config || !String(o.dias_config).trim()) return 'no_aplica';
+    return o.configurado ? 'completado' : 'pendiente';
+  }
+  function calcular(o) {
+    const di = analizarDias(o.dias);
+    const dc = analizarDias(o.dias_config);
+    const dias_inst = di ? di.span : 0;
+    const dias_conf = dc ? dc.span : 0;
+    const pct_inst = o.cantidad_total > 0 ? Math.min(100, (o.cantidad_real / o.cantidad_total) * 100) : 0;
+    const est = estadoConf(o);
+    const noAplica = est === 'no_aplica';
+    const confCompleta = est === 'completado';
+    const pct_conf = confCompleta && !noAplica ? 100 : 0;
+    const wInst = dias_inst;
+    let wConf = 0;
+    if (!noAplica) { wConf = dias_conf > 0 ? dias_conf : 1; }
+    const wSum = wInst + wConf;
+    const pct = wSum > 0 ? (pct_inst * wInst + pct_conf * wConf) / wSum : pct_inst;
+    const estado = pct >= 99 ? 'Completado' : pct > 0 ? 'En progreso' : 'Pendiente';
+    return { pct_inst: Math.round(pct_inst * 10) / 10, pct: Math.round(pct * 10) / 10, estado, config_estado: est };
+  }
+
+  const porArea = {};
+  let totalItems = 0, totalFaltaInst = 0, totalFaltaConf = 0;
+
+  for (const r of rows) {
+    const f = calcular(r);
+    const faltaInst = Math.round(Math.max(0, r.cantidad_total - r.cantidad_real) * 10) / 10;
+    const confEst = f.config_estado;
+    const faltaConf = (confEst === 'pendiente' || confEst === 'aplica')
+      ? Math.round(Math.max(0, r.cantidad_total - r.cantidad_real) * 10) / 10 : 0;
+    if (faltaInst <= 0 && faltaConf <= 0) continue;
+
+    if (!porArea[r.area]) porArea[r.area] = { grupos: {} };
+    const A = porArea[r.area];
+    if (!A.grupos[r.grupo]) A.grupos[r.grupo] = [];
+    A.grupos[r.grupo].push({
+      codigo: r.codigo, descripcion: r.descripcion, unidad: r.unidad,
+      cantidad_total: r.cantidad_total, cantidad_real: r.cantidad_real,
+      faltaInst, faltaConf, pct: f.pct, config_estado: confEst,
+    });
+    totalItems++;
+    totalFaltaInst = Math.round((totalFaltaInst + faltaInst) * 10) / 10;
+    totalFaltaConf = Math.round((totalFaltaConf + faltaConf) * 10) / 10;
+  }
+
+  const doc = new PDFDocument({ size: 'A4', margin: 36, bufferPages: true, autoFirstPage: true });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="faltantes_obra.pdf"');
+  doc.pipe(res);
+
+  const M = 36;
+  const BORDE = 595 - M * 2;
+  let y = 0;
+  const fechaStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  doc.on('pageAdded', () => {
+    doc.fontSize(7).fillColor('#94a3b8')
+      .text('SEGURIDAD CIUDADANA · Reporte de Faltantes de Obra · ' + fechaStr + ' · Página ' + doc.page, M, 790, { width: BORDE, align: 'center' });
+  });
+
+  const suficiente = (h) => { if (y + h > 775) { doc.addPage(); y = 50; } };
+
+  // Header institucional
+  doc.rect(0, 0, 595, 78).fill('#0f172a');
+  doc.fillColor('#ffffff').fontSize(17).text('REPORTE DE FALTANTES DE OBRA', M, 16, { width: BORDE, align: 'center' });
+  doc.fontSize(9).fillColor('#cbd5e1').text('PROYECTO SEGURIDAD CIUDADANA · Planta Interna COSC / PAR · Planta Externa', M, 40, { width: BORDE, align: 'center' });
+  doc.fontSize(8).fillColor('#94a3b8').text('Generado el ' + fechaStr, M, 56, { width: BORDE, align: 'center' });
+  y = 96;
+
+  // Resumen general
+  suficiente(50);
+  doc.rect(M, y, BORDE, 44).fill('#f8fafc').strokeColor('#cbd5e1').stroke();
+  doc.fontSize(10).fillColor('#0f172a').font('Helvetica-Bold').text('RESUMEN GENERAL', M + 10, y + 6);
+  doc.font('Helvetica').fontSize(9).fillColor('#475569');
+  doc.text(`Ítems con faltante: ${totalItems}`, M + 10, y + 20);
+  doc.text(`Faltante instalación: ${totalFaltaInst} unidades`, M + 200, y + 20);
+  doc.text(`Faltante configuración: ${totalFaltaConf} unidades`, M + 400, y + 20);
+  y += 48;
+
+  // Resumen por área
+  const areas = Object.entries(porArea).sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [areaName, A] of areas) {
+    const areaItems = Object.values(A.grupos).flat();
+    const areaFaltaInst = areaItems.reduce((s, i) => s + i.faltaInst, 0);
+    const areaFaltaConf = areaItems.reduce((s, i) => s + i.faltaConf, 0);
+
+    suficiente(30);
+    doc.rect(M, y, BORDE, 24).fill('#0ea5e9');
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10)
+      .text(areaName, M + 10, y + 6, { width: BORDE - 200 });
+    doc.fontSize(8).fillColor('#e0f2fe')
+      .text(`${areaItems.length} ítems · Falta Inst: ${Math.round(areaFaltaInst * 10) / 10} · Falta Conf: ${Math.round(areaFaltaConf * 10) / 10}`, M + BORDE - 10, y + 6, { width: 200, align: 'right' });
+    y += 28;
+
+    const COL = {
+      codigo: { x: M + 3, w: 52 },
+      desc: { x: M + 55, w: 155 },
+      unidad: { x: M + 210, w: 36 },
+      total: { x: M + 246, w: 40 },
+      real: { x: M + 286, w: 40 },
+      faltaInst: { x: M + 326, w: 50 },
+      config: { x: M + 376, w: 56 },
+      faltaConf: { x: M + 432, w: 50 },
+      avance: { x: M + 482, w: BORDE - 482 - 3 },
+    };
+
+    const filaHeader = () => {
+      suficiente(18);
+      doc.rect(M, y, BORDE, 18).fill('#1e3a8a');
+      doc.fontSize(7).fillColor('#ffffff').font('Helvetica-Bold');
+      doc.text('CÓDIGO', COL.codigo.x, y + 5, { width: COL.codigo.w });
+      doc.text('DESCRIPCIÓN', COL.desc.x, y + 5, { width: COL.desc.w });
+      doc.text('UND', COL.unidad.x, y + 5, { width: COL.unidad.w, align: 'center' });
+      doc.text('TOTAL', COL.total.x, y + 5, { width: COL.total.w, align: 'right' });
+      doc.text('REAL', COL.real.x, y + 5, { width: COL.real.w, align: 'right' });
+      doc.text('FALTA INST.', COL.faltaInst.x, y + 5, { width: COL.faltaInst.w, align: 'right' });
+      doc.text('CONFIG.', COL.config.x, y + 5, { width: COL.config.w, align: 'center' });
+      doc.text('FALTA CONF.', COL.faltaConf.x, y + 5, { width: COL.faltaConf.w, align: 'right' });
+      doc.text('% AVANCE', COL.avance.x, y + 5, { width: COL.avance.w, align: 'right' });
+      doc.font('Helvetica');
+      y += 18;
+    };
+
+    const grupos = Object.entries(A.grupos).sort((a, b) => a[0].localeCompare(b[0]));
+    let filaColor = '#ffffff';
+
+    for (const [grupoName, items] of grupos) {
+      suficiente(20);
+      doc.rect(M, y, BORDE, 16).fill('#f1f5f9');
+      doc.fontSize(7.5).fillColor('#334155').font('Helvetica-Oblique')
+        .text(grupoName || '(Sin grupo)', M + 8, y + 4, { width: BORDE - 16 });
+      doc.font('Helvetica');
+      y += 16;
+
+      filaHeader();
+      filaColor = '#ffffff';
+
+      for (const it of items) {
+        const filaFondo = filaColor;
+        filaColor = filaFondo === '#ffffff' ? '#f8fafc' : '#ffffff';
+        const h = 14;
+        suficiente(h);
+        if (filaFondo !== '#ffffff') doc.rect(M, y, BORDE, h).fill(filaFondo);
+        doc.fontSize(7).fillColor('#111827');
+        doc.text(it.codigo || '', COL.codigo.x + 3, y + 3, { width: COL.codigo.w - 6 });
+        doc.text((it.descripcion || '').slice(0, 40), COL.desc.x + 3, y + 3, { width: COL.desc.w - 6 });
+        doc.text(it.unidad || '', COL.unidad.x, y + 3, { width: COL.unidad.w, align: 'center' });
+        doc.text(String(it.cantidad_total || 0), COL.total.x, y + 3, { width: COL.total.w - 3, align: 'right' });
+        doc.text(String(it.cantidad_real || 0), COL.real.x, y + 3, { width: COL.real.w - 3, align: 'right' });
+        doc.fillColor(it.faltaInst > 0 ? '#dc2626' : '#111827')
+          .text(String(it.faltaInst || '—'), COL.faltaInst.x, y + 3, { width: COL.faltaInst.w - 3, align: 'right' });
+        const confLabel = it.config_estado === 'completado' ? 'OK' : it.config_estado === 'pendiente' ? 'Pend.' : it.config_estado === 'aplica' ? 'Sí' : '—';
+        doc.fillColor('#111827').text(confLabel, COL.config.x, y + 3, { width: COL.config.w, align: 'center' });
+        doc.fillColor(it.faltaConf > 0 ? '#dc2626' : '#111827')
+          .text(String(it.faltaConf || '—'), COL.faltaConf.x, y + 3, { width: COL.faltaConf.w - 3, align: 'right' });
+        doc.fillColor('#111827').text(it.pct + '%', COL.avance.x, y + 3, { width: COL.avance.w - 3, align: 'right' });
+        doc.strokeColor('#e2e8f0').lineWidth(0.5).moveTo(M, y + h).lineTo(M + BORDE, y + h).stroke();
+        y += h;
+      }
+
+      // Subtotal por grupo
+      const gFaltaInst = items.reduce((s, i) => s + i.faltaInst, 0);
+      const gFaltaConf = items.reduce((s, i) => s + i.faltaConf, 0);
+      suficiente(16);
+      doc.rect(M, y, BORDE, 16).fill('#e2e8f0');
+      doc.fontSize(7).fillColor('#0f172a').font('Helvetica-Bold');
+      doc.text(`Subtotal ${grupoName || '(Sin grupo)'}`, M + 8, y + 4, { width: 200 });
+      doc.text(`Falta Inst: ${Math.round(gFaltaInst * 10) / 10}`, COL.faltaInst.x - 40, y + 4, { width: 100, align: 'right' });
+      doc.text(`Falta Conf: ${Math.round(gFaltaConf * 10) / 10}`, COL.faltaConf.x, y + 4, { width: COL.faltaConf.w, align: 'right' });
+      doc.font('Helvetica');
+      y += 16;
+    }
+
+    // Total área
+    suficiente(18);
+    doc.rect(M, y, BORDE, 18).fill('#0ea5e9');
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+    doc.text(`TOTAL ${areaName}`, M + 8, y + 5, { width: 200 });
+    doc.text(`Falta Inst: ${Math.round(areaFaltaInst * 10) / 10}`, COL.faltaInst.x - 40, y + 5, { width: 100, align: 'right' });
+    doc.text(`Falta Conf: ${Math.round(areaFaltaConf * 10) / 10}`, COL.faltaConf.x, y + 5, { width: COL.faltaConf.w, align: 'right' });
+    doc.font('Helvetica');
+    y += 22;
+  }
+
+  // Total general
+  suficiente(22);
+  doc.rect(M, y, BORDE, 20).fill('#0f172a');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9);
+  doc.text('TOTAL GENERAL', M + 8, y + 5, { width: 200 });
+  doc.text(`${totalItems} ítems`, M + 200, y + 5, { width: 100 });
+  doc.text(`Falta Inst: ${totalFaltaInst}`, M + 320, y + 5, { width: 120, align: 'right' });
+  doc.text(`Falta Conf: ${totalFaltaConf}`, M + 450, y + 5, { width: BORDE - 450 - 3, align: 'right' });
+  doc.font('Helvetica');
+
+  doc.end();
+});
+
 export default router;

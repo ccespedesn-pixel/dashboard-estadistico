@@ -71,6 +71,7 @@ export const api = {
   materialActualizar: (id, body) => request(`/material/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   materialCrear: (body) => request('/material', { method: 'POST', body: JSON.stringify(body) }),
   materialEliminar: (id) => request(`/material/${id}`, { method: 'DELETE' }),
+  obraFaltantes: (area) => request(`/obra/faltantes${area && area !== 'TODAS' ? '?area=' + encodeURIComponent(area) : ''}`),
   obraActualizar: (id, body) => request(`/obra/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   excelPreview: (fileBase64) => request('/excel/preview', { method: 'POST', body: JSON.stringify({ file: fileBase64 }) }),
   excelImport: (rows, archivo_nombre) => request('/excel/import', { method: 'POST', body: JSON.stringify({ rows, archivo_nombre }) }),

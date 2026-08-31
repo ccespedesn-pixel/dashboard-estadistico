@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { api } from '../api.js';
 import { Card, Badge, estadoColor, Button } from './ui.jsx';
 import InformeTiempos from './InformeTiempos.jsx';
 import FaltanteInstalacion from './FaltanteInstalacion.jsx';
@@ -116,6 +117,20 @@ export default function ObraView({ datos, onActualizar, onImportar, readonly, oc
   const [cargando, setCargando] = useState(false);
   const [verTiempos, setVerTiempos] = useState(false);
   const [filtro, setFiltro] = useState('todas');
+  const [modalFaltantes, setModalFaltantes] = useState(null);
+  const [cargandoFaltantes, setCargandoFaltantes] = useState(false);
+
+  const abrirModalFaltantes = useCallback(async () => {
+    setCargandoFaltantes(true);
+    try {
+      const data = await api.obraFaltantes(tab !== 'FALTANTE' ? tab : 'TODAS');
+      setModalFaltantes(data);
+    } catch (err) {
+      setMsg({ type: 'error', text: 'Error al cargar faltantes: ' + err.message });
+      setTimeout(() => setMsg(null), 3000);
+    }
+    setCargandoFaltantes(false);
+  }, [tab]);
 
   const decoracionPorGrupo = (g) => {
     const items = g.items.map((it) => ({ ...it, pct: it.pct ?? calcPctFases(it.cantidad_real, it.cantidad_total, it.configurado, it.dias_inst, it.dias_conf).pct }));
@@ -239,6 +254,10 @@ export default function ObraView({ datos, onActualizar, onImportar, readonly, oc
         )}
         <div className="ml-auto flex items-center gap-3">
           {msg && <span className={`text-sm ${msg.type === 'ok' ? 'text-emerald-600' : 'text-rose-600'}`}>{msg.text}</span>}
+          <button type="button" onClick={abrirModalFaltantes} disabled={cargandoFaltantes}
+            className="rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 px-4 py-1.5 text-sm disabled:opacity-50">
+            {cargandoFaltantes ? 'Cargando...' : '📄 Reporte Faltantes'}
+          </button>
           {!ocultarTiempos && (
             <button type="button" onClick={() => setVerTiempos(true)} className="rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 px-4 py-1.5 text-sm">⏱️ Tiempo para finalizar</button>
           )}
@@ -307,6 +326,144 @@ export default function ObraView({ datos, onActualizar, onImportar, readonly, oc
       })}
       </>
       )}
+
+      {modalFaltantes && <ModalFaltantes data={modalFaltantes} onClose={() => setModalFaltantes(null)} />}
+    </div>
+  );
+}
+
+function ModalFaltantes({ data, onClose }) {
+  const [areaSel, setAreaSel] = useState('TODAS');
+  const areas = data?.porArea || [];
+  const filtered = areaSel === 'TODAS' ? areas : areas.filter((a) => a.area === areaSel);
+  const total = data?.total || { items: 0, faltaInst: 0, faltaConf: 0 };
+
+  const confLabel = (est) => {
+    if (est === 'completado') return <span className="text-emerald-600 font-semibold">OK</span>;
+    if (est === 'pendiente') return <span className="text-amber-600">Pendiente</span>;
+    if (est === 'aplica') return <span className="text-blue-600">Sí</span>;
+    return <span className="text-slate-400">—</span>;
+  };
+
+  const descargarPdf = () => {
+    const areaParam = areaSel !== 'TODAS' ? '?area=' + encodeURIComponent(areaSel) : '';
+    const a = document.createElement('a');
+    a.href = '/api/reportes/faltantes-obra.pdf' + areaParam;
+    a.download = 'faltantes_obra.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 pt-10 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between bg-slate-900 text-white px-6 py-4 rounded-t-2xl">
+          <div>
+            <h2 className="font-bold text-lg">📄 Reporte de Faltantes de Obra</h2>
+            <p className="text-xs text-slate-400">Vista previa antes de descargar el PDF</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none" title="Cerrar">✕</button>
+        </div>
+
+        {/* Filtros y resumen */}
+        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <div className="flex rounded-lg bg-slate-800 p-1 text-xs">
+              {['TODAS', ...areas.map((a) => a.area)].map((a) => (
+                <button key={a} onClick={() => setAreaSel(a)}
+                  className={`px-3 py-1 rounded-md transition-colors ${areaSel === a ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
+                  {a === 'TODAS' ? 'Todas' : a === 'PLANTA EXTERNA' ? 'Planta Externa' : 'Planta Interna'}
+                </button>
+              ))}
+            </div>
+            <button onClick={descargarPdf}
+              className="ml-auto rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 px-5 py-2 text-sm font-semibold">
+              📥 Descargar PDF
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white rounded-lg border border-slate-200 p-3 text-center">
+              <div className="text-xs text-slate-500">Ítems con faltante</div>
+              <div className="text-2xl font-bold text-slate-800">{total.items}</div>
+            </div>
+            <div className="bg-white rounded-lg border border-amber-200 p-3 text-center">
+              <div className="text-xs text-amber-600">Faltante instalación</div>
+              <div className="text-2xl font-bold text-amber-700">{total.faltaInst}</div>
+            </div>
+            <div className="bg-white rounded-lg border border-sky-200 p-3 text-center">
+              <div className="text-xs text-sky-600">Faltante configuración</div>
+              <div className="text-2xl font-bold text-sky-700">{total.faltaConf}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Contenido */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {filtered.length === 0 && (
+            <p className="text-center text-slate-500 py-8">No hay faltantes registrados.</p>
+          )}
+          {filtered.map((area) => (
+            <div key={area.area}>
+              <div className="flex items-center justify-between bg-sky-500 text-white rounded-t-lg px-4 py-2">
+                <span className="font-bold text-sm">{area.area}</span>
+                <span className="text-xs text-sky-100">{area.items} ítems · Falta Inst: {area.faltaInst} · Falta Conf: {area.faltaConf}</span>
+              </div>
+              {area.grupos.map((grupo) => (
+                <div key={grupo.grupo} className="border border-sky-200 border-t-0">
+                  <div className="bg-slate-100 px-4 py-1.5 text-xs font-medium text-slate-600 italic">{grupo.grupo || '(Sin grupo)'}</div>
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-800 text-white">
+                      <tr>
+                        <th className="px-3 py-1.5 text-left">Código</th>
+                        <th className="px-3 py-1.5 text-left">Descripción</th>
+                        <th className="px-3 py-1.5 text-center">Und</th>
+                        <th className="px-3 py-1.5 text-right">Total</th>
+                        <th className="px-3 py-1.5 text-right">Real</th>
+                        <th className="px-3 py-1.5 text-right">Falta Inst.</th>
+                        <th className="px-3 py-1.5 text-center">Config.</th>
+                        <th className="px-3 py-1.5 text-right">Falta Conf.</th>
+                        <th className="px-3 py-1.5 text-right">% Avance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {grupo.items.map((it, i) => (
+                        <tr key={it.id} className={i % 2 ? 'bg-slate-50' : 'bg-white'}>
+                          <td className="px-3 py-1.5 text-slate-500">{it.codigo}</td>
+                          <td className="px-3 py-1.5 font-medium">{it.descripcion}</td>
+                          <td className="px-3 py-1.5 text-center text-slate-500">{it.unidad || '—'}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">{it.cantidad_total}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">{it.cantidad_real}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-amber-700">{it.faltaInst || '—'}</td>
+                          <td className="px-3 py-1.5 text-center">{confLabel(it.config_estado)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-sky-700">{it.faltaConf || '—'}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">{it.pct}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+              <div className="bg-slate-200 rounded-b-lg px-4 py-1.5 text-xs font-bold text-slate-700 flex justify-between">
+                <span>TOTAL {area.area}</span>
+                <span>Falta Inst: {area.faltaInst} · Falta Conf: {area.faltaConf}</span>
+              </div>
+            </div>
+          ))}
+          {/* Total general */}
+          <div className="bg-slate-900 text-white rounded-lg px-4 py-3 flex justify-between items-center">
+            <span className="font-bold">TOTAL GENERAL</span>
+            <span className="text-sm">{total.items} ítems · Falta Inst: {total.faltaInst} · Falta Conf: {total.faltaConf}</span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-slate-200 px-6 py-3 flex justify-end gap-3 bg-slate-50 rounded-b-2xl">
+          <button onClick={onClose} className="rounded-lg border border-slate-300 px-5 py-2 text-sm hover:bg-slate-100">Cerrar</button>
+          <button onClick={descargarPdf} className="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-500">📥 Descargar PDF</button>
+        </div>
+      </div>
     </div>
   );
 }

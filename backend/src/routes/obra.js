@@ -370,6 +370,56 @@ router.get('/detalle', (req, res) => {
   res.json({ datos: grupos });
 });
 
+// faltantes de obra (JSON) - items con faltante de instalación y/o configuración
+router.get('/faltantes', (req, res) => {
+  const area = req.query.area;
+  const where = area && area !== 'TODAS' ? 'WHERE o.area = ?' : '';
+  const rows = db.prepare(
+    `SELECT o.* FROM obra_items o ${where}
+     ORDER BY o.area, o.grupo, o.codigo`).all(...(where ? [area] : []));
+
+  const porArea = {};
+  let totalItems = 0, totalFaltaInst = 0, totalFaltaConf = 0;
+
+  for (const r of rows) {
+    const f = calcularFases(r);
+    const faltaInst = Math.round(Math.max(0, r.cantidad_total - r.cantidad_real) * 10) / 10;
+    const confEst = f.config_estado;
+    const faltaConf = (confEst === 'pendiente' || confEst === 'aplica') ? Math.round(Math.max(0, r.cantidad_total - r.cantidad_real) * 10) / 10 : 0;
+
+    if (faltaInst <= 0 && faltaConf <= 0) continue;
+
+    if (!porArea[r.area]) porArea[r.area] = { grupos: {}, items: 0, faltaInst: 0, faltaConf: 0 };
+    const A = porArea[r.area];
+    if (!A.grupos[r.grupo]) A.grupos[r.grupo] = [];
+    A.grupos[r.grupo].push({
+      id: r.id, codigo: r.codigo, descripcion: r.descripcion, unidad: r.unidad,
+      cantidad_total: r.cantidad_total, cantidad_real: r.cantidad_real,
+      faltaInst, faltaConf,
+      pct_inst: f.pct_inst, pct: f.pct,
+      config_estado: confEst, estado: f.estado,
+    });
+    A.items++;
+    A.faltaInst = Math.round((A.faltaInst + faltaInst) * 10) / 10;
+    A.faltaConf = Math.round((A.faltaConf + faltaConf) * 10) / 10;
+    totalItems++;
+    totalFaltaInst = Math.round((totalFaltaInst + faltaInst) * 10) / 10;
+    totalFaltaConf = Math.round((totalFaltaConf + faltaConf) * 10) / 10;
+  }
+
+  const resultado = {
+    porArea: Object.entries(porArea).map(([area, A]) => ({
+      area,
+      items: A.items,
+      faltaInst: A.faltaInst,
+      faltaConf: A.faltaConf,
+      grupos: Object.entries(A.grupos).map(([grupo, items]) => ({ grupo, items })),
+    })),
+    total: { items: totalItems, faltaInst: totalFaltaInst, faltaConf: totalFaltaConf },
+  };
+  res.json(resultado);
+});
+
 // actualiza cantidad realizada y/o total a ejecutar y/o configuración (recalcula avance y marca manual)
 router.put('/:id', (req, res) => {
   const id = Number(req.params.id);
