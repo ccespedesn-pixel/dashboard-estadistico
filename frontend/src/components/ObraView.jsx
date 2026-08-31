@@ -425,7 +425,19 @@ function ModalFaltantes({ data, onClose }) {
               {area.grupos.map((grupo) => (
                 <div key={grupo.grupo} className="border border-sky-200 border-t-0">
                   <div className="bg-slate-100 px-4 py-1.5 text-xs font-medium text-slate-600 italic">{grupo.grupo || '(Sin grupo)'}</div>
-                  <table className="w-full text-xs">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '900px' }}>
+                    <colgroup>
+                      <col style={{ width: '10%' }} />
+                      <col style={{ width: '32%' }} />
+                      <col style={{ width: '5%' }} />
+                      <col style={{ width: '7%' }} />
+                      <col style={{ width: '7%' }} />
+                      <col style={{ width: '10%' }} />
+                      <col style={{ width: '10%' }} />
+                      <col style={{ width: '10%' }} />
+                      <col style={{ width: '9%' }} />
+                    </colgroup>
                     <thead className="bg-slate-800 text-white">
                       <tr>
                         <th className="px-3 py-1.5 text-left">Código</th>
@@ -442,8 +454,8 @@ function ModalFaltantes({ data, onClose }) {
                     <tbody>
                       {grupo.items.map((it, i) => (
                         <tr key={it.id} className={i % 2 ? 'bg-slate-50' : 'bg-white'}>
-                          <td className="px-3 py-1.5 text-slate-500">{it.codigo}</td>
-                          <td className="px-3 py-1.5 font-medium">{it.descripcion}</td>
+                          <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap">{it.codigo}</td>
+                          <td className="px-3 py-1.5 font-medium whitespace-normal break-words">{it.descripcion}</td>
                           <td className="px-3 py-1.5 text-center text-slate-500">{it.unidad || '—'}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{it.cantidad_total}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{it.cantidad_real}</td>
@@ -455,6 +467,7 @@ function ModalFaltantes({ data, onClose }) {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               ))}
               <div className="bg-slate-200 rounded-b-lg px-4 py-1.5 text-xs font-bold text-slate-700 flex justify-between">

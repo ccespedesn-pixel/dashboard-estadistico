@@ -364,15 +364,15 @@ router.get('/faltantes-obra.pdf', (req, res) => {
     y += 28;
 
     const COL = {
-      codigo: { x: M + 3, w: 52 },
-      desc: { x: M + 55, w: 155 },
-      unidad: { x: M + 210, w: 36 },
-      total: { x: M + 246, w: 40 },
-      real: { x: M + 286, w: 40 },
-      faltaInst: { x: M + 326, w: 50 },
-      config: { x: M + 376, w: 56 },
-      faltaConf: { x: M + 432, w: 50 },
-      avance: { x: M + 482, w: BORDE - 482 - 3 },
+      codigo: { x: M + 3, w: 48 },
+      desc: { x: M + 51, w: 210 },
+      unidad: { x: M + 261, w: 32 },
+      total: { x: M + 293, w: 36 },
+      real: { x: M + 329, w: 36 },
+      faltaInst: { x: M + 365, w: 46 },
+      config: { x: M + 411, w: 48 },
+      faltaConf: { x: M + 459, w: 46 },
+      avance: { x: M + 505, w: BORDE - 505 - 3 },
     };
 
     const filaHeader = () => {
@@ -409,12 +409,13 @@ router.get('/faltantes-obra.pdf', (req, res) => {
       for (const it of items) {
         const filaFondo = filaColor;
         filaColor = filaFondo === '#ffffff' ? '#f8fafc' : '#ffffff';
-        const h = 14;
+        const descHeight = doc.heightOfString(it.descripcion || '', { width: COL.desc.w - 6, fontSize: 7 });
+        const h = Math.max(14, descHeight + 7);
         suficiente(h);
         if (filaFondo !== '#ffffff') doc.rect(M, y, BORDE, h).fill(filaFondo);
         doc.fontSize(7).fillColor('#111827');
         doc.text(it.codigo || '', COL.codigo.x + 3, y + 3, { width: COL.codigo.w - 6 });
-        doc.text((it.descripcion || '').slice(0, 40), COL.desc.x + 3, y + 3, { width: COL.desc.w - 6 });
+        doc.text(it.descripcion || '', COL.desc.x + 3, y + 3, { width: COL.desc.w - 6 });
         doc.text(it.unidad || '', COL.unidad.x, y + 3, { width: COL.unidad.w, align: 'center' });
         doc.text(String(it.cantidad_total || 0), COL.total.x, y + 3, { width: COL.total.w - 3, align: 'right' });
         doc.text(String(it.cantidad_real || 0), COL.real.x, y + 3, { width: COL.real.w - 3, align: 'right' });
