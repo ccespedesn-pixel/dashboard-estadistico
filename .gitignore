@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-live/
+dist-static/
+deploy/.deploy/
+*.db
+*.log
+.env
+.DS_Store

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: seguridad-ciudadana
+    runtime: node
+    plan: free
+    buildCommand: |
+      cd backend && npm install --omit=dev
+      cd ../frontend && npm install && npm run build
+    startCommand: cd backend && node src/server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 24.18.0
