@@ -13,7 +13,6 @@ import Tiempos from './components/Tiempos.jsx';
 import ObraView from './components/ObraView.jsx';
 import MaterialView from './components/MaterialView.jsx';
 import AvanceObraResumen from './components/AvanceObraResumen.jsx';
-import PanelFotografico from './components/PanelFotografico.jsx';
 import DossierCalidad from './components/DossierCalidad.jsx';
 import { Select, Input, Button } from './components/ui.jsx';
 
@@ -165,7 +164,6 @@ export default function App() {
     { id: 'sistemas', label: 'Sistemas' },
     { id: 'faltantes', label: 'Datos faltantes' },
     { id: 'obra', label: 'Avance de obra' },
-    { id: 'fotografico', label: '📷 Panel Fotográfico' },
     { id: 'dossier', label: '📁 Dossier de Calidad' },
     { id: 'material', label: '📦 Material faltante' },
     { id: 'registro', label: 'Registro de avance' },
@@ -290,10 +288,6 @@ export default function App() {
 
         {!loading && tab === 'obra' && (
           <ObraView datos={obra?.datos} onActualizar={actualizarObra} onImportar={importarObra} readonly={readonly} ocultarTiempos={STATIC} />
-        )}
-
-        {!loading && tab === 'fotografico' && (
-          <PanelFotografico readonly={readonly} />
         )}
 
         {!loading && tab === 'dossier' && (
