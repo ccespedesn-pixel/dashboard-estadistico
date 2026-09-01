@@ -95,6 +95,17 @@ CREATE TABLE IF NOT EXISTS material (
   activo INTEGER DEFAULT 1,
   UNIQUE(area, categoria, material, modelo)
 );
+
+CREATE TABLE IF NOT EXISTS obra_fotos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INTEGER NOT NULL,
+  tipo TEXT NOT NULL DEFAULT 'ejecutada',
+  archivo TEXT NOT NULL,
+  descripcion TEXT DEFAULT '',
+  fecha TEXT DEFAULT (date('now')),
+  usuario TEXT DEFAULT 'Sistema',
+  FOREIGN KEY (item_id) REFERENCES obra_items(id) ON DELETE CASCADE
+);
 `);
 
 // migración para bases existentes: agrega columnas si faltan

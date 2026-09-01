@@ -101,6 +101,8 @@ const excel = await import('./routes/excel.js');
 const obra = await import('./routes/obra.js');
 const material = await import('./routes/material.js');
 const reportes = await import('./routes/reportes.js');
+const fotos = await import('./routes/fotos.js');
+const dossier = await import('./routes/dossier.js');
 
 app.use('/api/meta', meta.default);
 app.use('/api/actividades', actividades.default);
@@ -112,6 +114,12 @@ app.use('/api/excel', excel.default);
 app.use('/api/obra', obra.default);
 app.use('/api/material', material.default);
 app.use('/api/reportes', reportes.default);
+app.use('/api/fotos', fotos.default);
+app.use('/api/dossier', dossier.default);
+
+// servir fotos subidas
+const uploadsDir = path.join(__dirname, '..', 'uploads', 'fotos');
+app.use('/uploads/fotos', express.static(uploadsDir));
 
 // servir build frontend si existe
 const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');

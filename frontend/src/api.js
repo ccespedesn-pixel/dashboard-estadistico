@@ -73,6 +73,8 @@ export const api = {
   materialEliminar: (id) => request(`/material/${id}`, { method: 'DELETE' }),
   obraFaltantes: (area) => request(`/obra/faltantes${area && area !== 'TODAS' ? '?area=' + encodeURIComponent(area) : ''}`),
   obraActualizar: (id, body) => request(`/obra/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  fotosPanel: () => request('/fotos/obra-panel'),
+  fotosItem: (itemId) => request(`/fotos/${itemId}`),
   excelPreview: (fileBase64) => request('/excel/preview', { method: 'POST', body: JSON.stringify({ file: fileBase64 }) }),
   excelImport: (rows, archivo_nombre) => request('/excel/import', { method: 'POST', body: JSON.stringify({ rows, archivo_nombre }) }),
   historial: () => request('/excel/historial'),
